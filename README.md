@@ -9,9 +9,10 @@ This stack runs on the NAS and provides:
   read-only access to the Docker API.
 
 Uptime Kuma creates and manages its administrator account in the browser.
-Dozzle does not have a GUI for creating local users, so its built-in login is
-disabled. Dozzle is protected by binding it only to the NAS's private LAN or VPN
-address.
+Dozzle uses its built-in login with a local user file. Its password generator
+reads the password from a hidden terminal prompt and writes only the bcrypt hash
+to `dozzle-users.yml`; the plaintext password is not stored or placed in shell
+history.
 
 Do not expose ports 3003 or 3004 to the public internet.
 
@@ -37,19 +38,32 @@ NAS. Open the URLs later from a browser on the same private network.
    Leave the port values at 3003 and 3004 unless they conflict with another
    NAS service. Do not use `0.0.0.0` or a public address.
 
-3. Download the pinned container images:
+3. Generate the Dozzle account. This single block asks for the password without
+   displaying it, generates the user file without allocating a Docker TTY, and
+   removes the temporary shell variable:
+
+   ```bash
+   read -rsp 'Dozzle password: ' DOZZLE_PASSWORD
+   printf '\n'
+   printf '%s\n' "$DOZZLE_PASSWORD" | docker run --rm -i amir20/dozzle:v10.7.5 generate logan --user-roles none > dozzle-users.yml
+   unset DOZZLE_PASSWORD
+   ```
+
+   `dozzle-users.yml` is ignored by Git and must stay on the NAS.
+
+4. Download the pinned container images:
 
    ```bash
    docker compose pull
    ```
 
-4. Start the stack:
+5. Start the stack:
 
    ```bash
    docker compose up -d
    ```
 
-5. Confirm that all three services are running:
+6. Confirm that all three services are running:
 
    ```bash
    docker compose ps
@@ -61,24 +75,8 @@ Replace `<NAS_PRIVATE_IP>` with the same address used for `MONITORING_BIND`.
 
 1. Open `http://<NAS_PRIVATE_IP>:3003`.
 2. Create the Uptime Kuma administrator account in its browser setup screen.
-   This is the only monitoring password setup; no password is entered in a
-   terminal or configuration file.
-3. Open `http://<NAS_PRIVATE_IP>:3004` for Dozzle. It opens directly without a
-   login because access is limited to the private network.
-
-No SSH tunnel or `dozzle-users.yml` file is required.
-
-## Replacing the previous Dozzle login setup
-
-After copying or pulling this updated compose file onto the NAS, recreate
-Dozzle so the old file-based authentication configuration is removed:
-
-```bash
-docker compose up -d --force-recreate dozzle
-```
-
-Then open `http://<NAS_PRIVATE_IP>:3004`. An old `dozzle-users.yml` file is no
-longer used and may be deleted through the NAS file-management GUI.
+3. Open `http://<NAS_PRIVATE_IP>:3004` and sign in to Dozzle with username
+   `logan` and the password supplied to the hidden prompt during setup.
 
 ## Docker container monitoring
 
