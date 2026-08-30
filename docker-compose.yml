@@ -1,0 +1,67 @@
+services:
+  docker-socket-proxy:
+    image: ghcr.io/tecnativa/docker-socket-proxy:v0.5.0
+    container_name: monitoring-docker-socket-proxy
+    restart: unless-stopped
+    environment:
+      CONTAINERS: "1"
+      INFO: "1"
+      POST: "0"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    networks:
+      - docker-api
+    security_opt:
+      - no-new-privileges:true
+
+  uptime-kuma:
+    image: louislam/uptime-kuma:2.5.3
+    container_name: uptime-kuma
+    restart: unless-stopped
+    ports:
+      - "${MONITORING_BIND:?Set MONITORING_BIND in .env}:${KUMA_PORT:-3003}:3001"
+    volumes:
+      - kuma-data:/app/data
+    depends_on:
+      - docker-socket-proxy
+    networks:
+      - default
+      - docker-api
+    security_opt:
+      - no-new-privileges:true
+
+  dozzle:
+    image: amir20/dozzle:v10.7.5
+    container_name: dozzle
+    restart: unless-stopped
+    ports:
+      - "${MONITORING_BIND:?Set MONITORING_BIND in .env}:${DOZZLE_PORT:-3004}:8080"
+    environment:
+      DOZZLE_AUTH_PROVIDER: simple
+      DOZZLE_REMOTE_HOST: tcp://docker-socket-proxy:2375|local
+      DOZZLE_NO_ANALYTICS: "true"
+    volumes:
+      - dozzle-data:/data
+    secrets:
+      - source: dozzle-users
+        target: /data/users.yml
+    depends_on:
+      - docker-socket-proxy
+    networks:
+      - default
+      - docker-api
+    security_opt:
+      - no-new-privileges:true
+
+secrets:
+  dozzle-users:
+    file: ./dozzle-users.yml
+
+volumes:
+  kuma-data:
+  dozzle-data:
+
+networks:
+  default:
+  docker-api:
+    internal: true
