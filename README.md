@@ -1,75 +1,103 @@
 # Private Docker Monitoring
 
-A private monitoring stack built with:
+This stack runs on the NAS and provides:
 
 - [Uptime Kuma](https://github.com/louislam/uptime-kuma) for availability,
   certificate-expiry, and scheduled-job monitoring.
-- [Dozzle](https://github.com/amir20/dozzle) for authenticated container log
-  viewing.
-- [Docker Socket Proxy](https://github.com/Tecnativa/docker-socket-proxy) to
-  prevent monitoring services from sending write requests to the Docker daemon.
+- [Dozzle](https://github.com/amir20/dozzle) for container log viewing.
+- [Docker Socket Proxy](https://github.com/Tecnativa/docker-socket-proxy) for
+  read-only access to the Docker API.
 
-The stack is intended for a trusted private network. Do not publish its ports
-directly to the internet.
+Uptime Kuma creates and manages its administrator account in the browser.
+Dozzle does not have a GUI for creating local users, so its built-in login is
+disabled. Dozzle is protected by binding it only to the NAS's private LAN or VPN
+address.
 
-## Secure setup
+Do not expose ports 3003 or 3004 to the public internet.
 
-Copy the example configuration:
+## Initial NAS setup
+
+Run the Docker commands in this section from the Monitoring directory on the
+NAS. Open the URLs later from a browser on the same private network.
+
+1. Create the local environment file:
+
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Open `.env` in your preferred editor or the NAS file-management GUI. Set
+   `MONITORING_BIND` to the NAS's private LAN or VPN address. For example, if
+   the NAS is reached at `192.168.2.10`, use:
+
+   ```text
+   MONITORING_BIND=192.168.2.10
+   ```
+
+   Leave the port values at 3003 and 3004 unless they conflict with another
+   NAS service. Do not use `0.0.0.0` or a public address.
+
+3. Download the pinned container images:
+
+   ```bash
+   docker compose pull
+   ```
+
+4. Start the stack:
+
+   ```bash
+   docker compose up -d
+   ```
+
+5. Confirm that all three services are running:
+
+   ```bash
+   docker compose ps
+   ```
+
+## Browser setup
+
+Replace `<NAS_PRIVATE_IP>` with the same address used for `MONITORING_BIND`.
+
+1. Open `http://<NAS_PRIVATE_IP>:3003`.
+2. Create the Uptime Kuma administrator account in its browser setup screen.
+   This is the only monitoring password setup; no password is entered in a
+   terminal or configuration file.
+3. Open `http://<NAS_PRIVATE_IP>:3004` for Dozzle. It opens directly without a
+   login because access is limited to the private network.
+
+No SSH tunnel or `dozzle-users.yml` file is required.
+
+## Replacing the previous Dozzle login setup
+
+After copying or pulling this updated compose file onto the NAS, recreate
+Dozzle so the old file-based authentication configuration is removed:
 
 ```bash
-cp .env.example .env
+docker compose up -d --force-recreate dozzle
 ```
 
-Generate a Dozzle user. The command prompts for the password so it does not
-appear in shell history:
-
-```bash
-docker run --rm -it amir20/dozzle:v10.7.5 \
-  generate admin --user-roles none > dozzle-users.yml
-```
-
-Both `.env` and `dozzle-users.yml` are ignored by Git.
-
-Start the stack:
-
-```bash
-docker compose pull
-docker compose up -d
-```
-
-### First-run Kuma bootstrap
-
-Keep `MONITORING_BIND=127.0.0.1` until the Kuma administrator account exists.
-Forward the ports from a trusted client:
-
-```bash
-ssh -L 3003:127.0.0.1:3003 -L 3004:127.0.0.1:3004 user@monitoring-host
-```
-
-Open `http://127.0.0.1:3003`, create the Kuma administrator, and confirm that
-`http://127.0.0.1:3004` requires the Dozzle login. You can then set
-`MONITORING_BIND` in `.env` to a specific private interface address and run
-`docker compose up -d` again. Never use `0.0.0.0` unless every host interface is
-protected by an appropriate firewall.
+Then open `http://<NAS_PRIVATE_IP>:3004`. An old `dozzle-users.yml` file is no
+longer used and may be deleted through the NAS file-management GUI.
 
 ## Docker container monitoring
 
-Only the socket proxy receives the host's Docker socket. It permits the
-read-only `CONTAINERS` and `INFO` API sections and explicitly rejects all
-`POST` requests.
+Only Docker Socket Proxy receives the host's Docker socket. It permits the
+read-only `CONTAINERS` and `INFO` API sections and explicitly rejects write
+requests.
 
-In Kuma, create a Docker Host using:
+In Kuma, add a Docker Host through the Kuma browser UI with this endpoint:
 
 ```text
 tcp://docker-socket-proxy:2375
 ```
 
-Dozzle is configured to use the same endpoint automatically. Shell access and
-container actions are not enabled.
+Dozzle uses the same endpoint automatically. Container actions and shell access
+remain disabled.
 
-Read-only Docker API responses and container logs can still contain sensitive
-environment or operational information. Keep Kuma, Dozzle, and the
-`docker-api` network private even with these controls.
+Container logs can contain sensitive operational information. Keep Kuma,
+Dozzle, and the `docker-api` network private even with the restricted socket
+proxy.
 
 ## Suggested monitors
 

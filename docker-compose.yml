@@ -37,14 +37,13 @@ services:
     ports:
       - "${MONITORING_BIND:?Set MONITORING_BIND in .env}:${DOZZLE_PORT:-3004}:8080"
     environment:
-      DOZZLE_AUTH_PROVIDER: simple
+      # Dozzle has no GUI for creating local users. Access is therefore
+      # restricted by the private address in MONITORING_BIND instead.
+      DOZZLE_AUTH_PROVIDER: none
       DOZZLE_REMOTE_HOST: tcp://docker-socket-proxy:2375|local
       DOZZLE_NO_ANALYTICS: "true"
     volumes:
       - dozzle-data:/data
-    secrets:
-      - source: dozzle-users
-        target: /data/users.yml
     depends_on:
       - docker-socket-proxy
     networks:
@@ -52,11 +51,6 @@ services:
       - docker-api
     security_opt:
       - no-new-privileges:true
-
-secrets:
-  dozzle-users:
-    file: ./dozzle-users.yml
-
 volumes:
   kuma-data:
   dozzle-data:
